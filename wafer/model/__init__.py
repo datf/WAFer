@@ -2,7 +2,13 @@
 
 from wafer.model.encoder import EncodedRecord, encode_record
 from wafer.model.head import EvidenceRoutingLayer, CrossFieldAttentionLayer, JointSchemaHead
-from wafer.model.backbone import GemmaClefDecisionModel, SurrogateDecisionModel
+from wafer.model.backbone import (
+    EmbeddingGemmaDecisionModel,
+    GemmaClefDecisionModel,
+    SurrogateDecisionModel,
+    MODEL_ALIASES,
+    resolve_model_id,
+)
 from wafer.model.loss import compute_calibrated_systemone_loss
 
 __all__ = [
@@ -11,7 +17,10 @@ __all__ = [
     "EvidenceRoutingLayer",
     "CrossFieldAttentionLayer",
     "JointSchemaHead",
+    "EmbeddingGemmaDecisionModel",
     "GemmaClefDecisionModel",
     "SurrogateDecisionModel",
+    "MODEL_ALIASES",
+    "resolve_model_id",
     "compute_calibrated_systemone_loss",
 ]

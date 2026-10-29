@@ -18,7 +18,7 @@ CLASSIFY_ARGS ?=
 # Common container invocation flags
 RUN_FLAGS := --rm -e PYTHONPATH=/app -v $(WORKSPACE):/app:Z -w /app
 
-.PHONY: all help build test test-unit test-integration test-fast inspect classify lock check-lock clean shell
+.PHONY: all help build test test-unit test-integration test-fast inspect inspect-embeddinggemma train-embeddinggemma classify lock check-lock clean shell
 
 all: help
 
@@ -28,18 +28,20 @@ help:
 	@echo "Usage: make <target> [ARGS='...']"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build             Build the container image ($(IMAGE_TAG)) via $(RUNTIME_NAME)"
-	@echo "  test              Run the full pytest suite in container (supports ARGS='...')"
-	@echo "  test-unit         Run unit tests only"
-	@echo "  test-integration  Run integration tests only"
-	@echo "  test-fast         Run unit tests (skips long model training)"
-	@echo "  inspect           Evaluate sample traffic logs (default: $(LOG_FILE))"
-	@echo "  classify          Run log classifier and rules test summary"
-	@echo "  lock              Generate / update uv.lock from pyproject.toml"
-	@echo "  check-lock        Verify uv.lock is in sync with pyproject.toml"
-	@echo "  shell             Open an interactive shell inside the container"
-	@echo "  clean             Remove cache directories and temporary checkpoints"
-	@echo "  help              Show this help message"
+	@echo "  build                  Build the container image ($(IMAGE_TAG)) via $(RUNTIME_NAME)"
+	@echo "  test                   Run the full pytest suite in container (supports ARGS='...')"
+	@echo "  test-unit              Run unit tests only"
+	@echo "  test-integration       Run integration tests only"
+	@echo "  test-fast              Run unit tests (skips long model training)"
+	@echo "  inspect                Evaluate sample traffic logs (default: $(LOG_FILE))"
+	@echo "  inspect-embeddinggemma Evaluate sample traffic using EmbeddingGemma 2"
+	@echo "  train-embeddinggemma   Fine-tune EmbeddingGemma 2 + LoRA on WAF dataset"
+	@echo "  classify               Run log classifier and rules test summary"
+	@echo "  lock                   Generate / update uv.lock from pyproject.toml"
+	@echo "  check-lock             Verify uv.lock is in sync with pyproject.toml"
+	@echo "  shell                  Open an interactive shell inside the container"
+	@echo "  clean                  Remove cache directories and temporary checkpoints"
+	@echo "  help                   Show this help message"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make build"
@@ -70,6 +72,14 @@ test-fast:
 inspect:
 	@echo "==> Running log inspection on $(LOG_FILE)..."
 	$(RUNTIME) run $(RUN_FLAGS) $(IMAGE_TAG) python3 wafer/eval/inspect_logs.py $(LOG_FILE)
+
+inspect-embeddinggemma:
+	@echo "==> Running log inspection with EmbeddingGemma 2..."
+	$(RUNTIME) run $(RUN_FLAGS) $(IMAGE_TAG) python3 -m wafer.eval.inspect_logs $(LOG_FILE) --model-id embeddinggemma-2 $(ARGS)
+
+train-embeddinggemma:
+	@echo "==> Fine-tuning EmbeddingGemma 2 on WAF traffic..."
+	$(RUNTIME) run $(RUN_FLAGS) $(IMAGE_TAG) python3 -m wafer.eval.inspect_logs $(LOG_FILE) --model-id embeddinggemma-2 --train --epochs 3 $(ARGS)
 
 classify:
 	@echo "==> Running log classifier in container..."

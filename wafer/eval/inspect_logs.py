@@ -146,29 +146,36 @@ def get_trained_surrogate(
 
 
 def get_trained_pretrained_backbone(
-    model_id: str = "HuggingFaceTB/SmolLM2-135M",
+    model_id: str = "google/embeddinggemma-2",
     checkpoint_path: Optional[str] = None,
     epochs: int = 5,
     seed: int = 42,
     force_retrain: bool = False,
     device_pref: str = "auto",
+    load_in_4bit: bool = False,
 ) -> Tuple[torch.nn.Module, Any]:
     """
-    Initializes a real pretrained backbone (e.g. SmolLM2-135M, Qwen/Qwen2.5-0.5B, or Gemma 4),
+    Initializes a real pretrained backbone (EmbeddingGemma 2, Gemma 4, SmolLM2, etc.),
     attaches Rank-32/64 LoRA + JointSchemaHead, and trains on synthetic WAF data.
     """
     from transformers import AutoTokenizer, AutoConfig
-    from wafer.model.backbone import GemmaClefDecisionModel
+    from wafer.model.backbone import (
+        EmbeddingGemmaDecisionModel,
+        GemmaClefDecisionModel,
+        resolve_model_id,
+    )
+
+    real_model_id = resolve_model_id(model_id)
 
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
     if checkpoint_path is None:
-        safe_name = model_id.replace("/", "_")
+        safe_name = real_model_id.replace("/", "_")
         checkpoint_path = f"checkpoints/{safe_name}_clef.pt"
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(real_model_id)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
@@ -190,19 +197,30 @@ def get_trained_pretrained_backbone(
     dtype = torch.float32 if device == "cpu" else torch.float16
 
     # Determine head dimensions based on model size
-    cfg = AutoConfig.from_pretrained(model_id)
-    hidden_size = getattr(cfg, "hidden_size", 576)
+    cfg = AutoConfig.from_pretrained(real_model_id)
+    hidden_size = getattr(cfg, "hidden_size", getattr(getattr(cfg, "text_config", None), "hidden_size", 768))
     d_head = 256 if hidden_size <= 768 else 512
     lora_r = 32 if hidden_size <= 768 else 64
 
-    print(f"Loading pretrained backbone '{model_id}' (hidden_size={hidden_size}, d_head={d_head}) on device={device}...", flush=True)
-    model = GemmaClefDecisionModel(
-        model_id=model_id,
-        lora_rank=lora_r,
-        lora_alpha=lora_r,
-        d_head=d_head,
-        torch_dtype=dtype,
-    )
+    print(f"Loading pretrained backbone '{real_model_id}' (hidden_size={hidden_size}, d_head={d_head}) on device={device} (4-bit={load_in_4bit})...", flush=True)
+    if "embeddinggemma" in real_model_id.lower():
+        model = EmbeddingGemmaDecisionModel(
+            model_id=real_model_id,
+            lora_rank=lora_r,
+            lora_alpha=lora_r,
+            d_head=d_head,
+            torch_dtype=dtype,
+            load_in_4bit=load_in_4bit,
+        )
+    else:
+        model = GemmaClefDecisionModel(
+            model_id=real_model_id,
+            lora_rank=lora_r,
+            lora_alpha=lora_r,
+            d_head=d_head,
+            torch_dtype=dtype,
+            load_in_4bit=load_in_4bit,
+        )
     model.to(device)
 
     if os.path.exists(checkpoint_path) and not force_retrain:
@@ -245,6 +263,7 @@ def inspect_log_stream(
     force_retrain: bool = False,
     epochs: int = 5,
     device: str = "auto",
+    load_in_4bit: bool = False,
 ) -> List[Dict[str, Any]]:
     """Parses, sanitizes, and evaluates an array of raw access log lines."""
     if model is None:
@@ -255,6 +274,7 @@ def inspect_log_stream(
                 epochs=epochs,
                 force_retrain=force_retrain,
                 device_pref=device,
+                load_in_4bit=load_in_4bit,
             )
         elif train_first:
             ckpt = checkpoint_path or "checkpoints/calibrated_surrogate.pt"
@@ -313,6 +333,7 @@ def main():
     parser.add_argument("--checkpoint", default=None, help="Path to model checkpoint")
     parser.add_argument("--force-retrain", action="store_true", help="Force retraining checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for determinism")
+    parser.add_argument("--4bit", "--load-in-4bit", dest="load_in_4bit", action="store_true", help="Load backbone in 4-bit NF4 precision via BitsAndBytes")
     args = parser.parse_args()
 
     if args.logfile:
@@ -329,6 +350,7 @@ def main():
         force_retrain=args.force_retrain,
         epochs=args.epochs,
         device=args.device,
+        load_in_4bit=args.load_in_4bit,
     )
 
     if args.json:

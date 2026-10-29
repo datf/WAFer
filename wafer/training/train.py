@@ -18,11 +18,13 @@ def get_optimizer_with_differential_lrs(
     head_lr: float = 2e-4,
     lora_lr: float = 5e-5,
     weight_decay: float = 0.01,
-) -> AdamW:
+    use_8bit: bool = False,
+) -> torch.optim.Optimizer:
     """
     Configures AdamW with differential learning rates:
     - JointSchemaHead parameters: head_lr (2e-4)
     - LoRA adapter parameters: lora_lr (5e-5)
+    If use_8bit and CUDA is available, uses bitsandbytes.optim.PagedAdamW8bit.
     """
     head_params = []
     lora_params = []
@@ -45,6 +47,13 @@ def get_optimizer_with_differential_lrs(
         param_groups.append({"params": lora_params, "lr": lora_lr, "weight_decay": weight_decay})
     if other_params:
         param_groups.append({"params": other_params, "lr": head_lr, "weight_decay": weight_decay})
+
+    if use_8bit and torch.cuda.is_available():
+        try:
+            import bitsandbytes as bnb
+            return bnb.optim.PagedAdamW8bit(param_groups)
+        except Exception:
+            pass
 
     return AdamW(param_groups)
 
