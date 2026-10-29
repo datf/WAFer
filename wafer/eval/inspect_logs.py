@@ -68,11 +68,11 @@ def evaluate_sanitized_request(
     # Derive gateway decision with simplified schema: action [allow|deny], alert [true|false]
     # Invariant: blocking strictly implies alerting
     action_probs = results.get("action", {}).get("probabilities", {})
-    p_deny = action_probs.get("deny", results.get("gateway_action", {}).get("probabilities", {}).get("block", 0.0))
+    p_deny = action_probs.get("deny", 0.0)
     p_allow = action_probs.get("allow", 1.0 - p_deny)
 
     alert_probs = results.get("alert", {}).get("probabilities", {})
-    p_alert = alert_probs.get("true", results.get("is_malicious", {}).get("probabilities", {}).get("true", 0.0))
+    p_alert = alert_probs.get("true", 0.0)
 
     if p_deny >= 0.50:
         decision = "DENY (403)"

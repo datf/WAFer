@@ -26,34 +26,6 @@ PARAPHRASE_BANK: Dict[str, List[str]] = {
         "Assess whether this transaction should be flagged for security alerting.",
         "Should this request notify security operations?",
     ],
-    "is_malicious": [
-        "Does this HTTP request contain an active security exploit, injection, or authorization bypass?",
-        "Is this web request malicious, abusive, or indicative of an attack?",
-        "Determine if the incoming payload is an attack or harmless traffic.",
-        "Assess whether this HTTP transaction targets any application vulnerability.",
-        "Check if this request is safe or hostile.",
-    ],
-    "primary_attack_vector": [
-        "Identify the primary attack category present in the request.",
-        "Classify the specific attack vector or injection technique.",
-        "What type of security violation or exploit is occurring in this payload?",
-        "Categorize the vulnerability being targeted by this HTTP request.",
-        "Determine the primary exploit class of this transaction.",
-    ],
-    "severity_score": [
-        "Rate the exploitability and impact severity of this request from 0 (benign) to 4 (critical).",
-        "Assign an ordinal severity score from 0 (safe) to 4 (critical impact).",
-        "Score the risk and blast radius of this request on a 0 to 4 scale.",
-        "How severe is the threat posed by this request (0 = none, 4 = catastrophic)?",
-        "Provide an exploitability rating between 0 and 4.",
-    ],
-    "gateway_action": [
-        "What action should the gateway take on this request?",
-        "Determine the appropriate mitigation or forwarding policy.",
-        "Should the proxy allow, challenge, log, or drop this HTTP request?",
-        "Select the recommended enforcement action for this transaction.",
-        "How should the edge gateway handle this incoming traffic?",
-    ],
 }
 
 

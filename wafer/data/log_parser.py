@@ -311,7 +311,6 @@ def build_waf_training_record(
             "alert": alt == "true",
             "status_code": entry.status_code,
             "rule_id": classification.rule_id,
-            "reason": classification.reason,
         },
     }
 

@@ -23,9 +23,9 @@ def sample_record():
             "body": "{\"user\": \"admin' OR 1=1--\"}",
         },
         "questions": {
-            "is_malicious": {
+            "alert": {
                 "type": "noul",
-                "instructions": "Is this request malicious?",
+                "instructions": "Should this request trigger an alert?",
                 "criteria": {"true": "Yes", "false": "No"},
             },
             "primary_attack": {
@@ -40,7 +40,7 @@ def sample_record():
             },
         },
         "targets": {
-            "is_malicious": "true",
+            "alert": "true",
             "primary_attack": "sqli",
             "severity": 2,
         },
@@ -82,7 +82,7 @@ def test_encode_record_targets_one_hot(tokenizer, sample_record):
     assert rec.targets is not None
     assert len(rec.targets) == 3
 
-    # is_malicious: "true" -> index 0 in [true, false]
+    # alert: "true" -> index 0 in [true, false]
     assert torch.equal(rec.targets[0], torch.tensor([1.0, 0.0]))
 
     # primary_attack: "sqli" -> index 1 in [benign, sqli]
@@ -94,7 +94,7 @@ def test_encode_record_targets_one_hot(tokenizer, sample_record):
 
 def test_encode_record_soft_targets(tokenizer, sample_record):
     sample_record["targets"] = {
-        "is_malicious": [0.8, 0.2],
+        "alert": [0.8, 0.2],
         "primary_attack": [0.1, 0.9],
         "severity": [0.05, 0.15, 0.80],
     }

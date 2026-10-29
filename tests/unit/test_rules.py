@@ -20,8 +20,6 @@ def test_default_status_rules():
     r200 = rules.classify(status_code=200, method="GET", path="/")
     assert r200.action == "allow"
     assert not r200.alert
-    assert r200.is_malicious == "false"
-    assert r200.severity_score == 0
 
     # 2. 404 should be alerted and denied
     r404 = rules.classify(status_code=404, method="GET", path="/missing")
@@ -43,7 +41,6 @@ def test_default_status_rules():
         r_redirect = rules.classify(status_code=code, method="GET", path="/bot-target")
         assert r_redirect.action == "deny"
         assert r_redirect.alert is True
-        assert r_redirect.is_malicious == "true"
 
 
 def test_custom_rule_matching():
@@ -58,8 +55,6 @@ def test_custom_rule_matching():
         ),
         action="allow",
         alert=False,
-        is_malicious="false",
-        severity_score=0,
     )
     rules = FolderRules(name="custom", rules=[rule])
 
