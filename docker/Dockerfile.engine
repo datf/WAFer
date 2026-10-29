@@ -21,11 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Initialize virtual environment in /opt/venv so volume mounts to /app don't shadow it
 RUN uv venv /opt/venv
 
-# Copy packaging metadata first for layer caching
-COPY pyproject.toml README.md /app/
+# Copy packaging metadata and lockfile first for deterministic layer caching
+COPY pyproject.toml uv.lock README.md /app/
 
-# Install dependencies into virtual environment
-RUN uv pip install -e ".[dev]"
+# Install exact pinned dependencies from uv.lock into the active virtual environment (/opt/venv)
+RUN uv sync --active --frozen --extra dev
 
 # Copy source tree and tests
 COPY wafer/ /app/wafer/

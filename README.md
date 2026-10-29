@@ -65,6 +65,10 @@ make inspect
 # Run log classifier and rules summary
 make classify
 
+# Update or verify uv.lock
+make lock
+make check-lock
+
 # Clean caches and temporary checkpoints
 make clean
 ```

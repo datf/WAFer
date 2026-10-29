@@ -18,7 +18,7 @@ CLASSIFY_ARGS ?=
 # Common container invocation flags
 RUN_FLAGS := --rm -e PYTHONPATH=/app -v $(WORKSPACE):/app:Z -w /app
 
-.PHONY: all help build test test-unit test-integration test-fast inspect classify clean shell
+.PHONY: all help build test test-unit test-integration test-fast inspect classify lock check-lock clean shell
 
 all: help
 
@@ -35,6 +35,8 @@ help:
 	@echo "  test-fast         Run unit tests (skips long model training)"
 	@echo "  inspect           Evaluate sample traffic logs (default: $(LOG_FILE))"
 	@echo "  classify          Run log classifier and rules test summary"
+	@echo "  lock              Generate / update uv.lock from pyproject.toml"
+	@echo "  check-lock        Verify uv.lock is in sync with pyproject.toml"
 	@echo "  shell             Open an interactive shell inside the container"
 	@echo "  clean             Remove cache directories and temporary checkpoints"
 	@echo "  help              Show this help message"
@@ -72,6 +74,14 @@ inspect:
 classify:
 	@echo "==> Running log classifier in container..."
 	$(RUNTIME) run $(RUN_FLAGS) $(IMAGE_TAG) python3 -m wafer.data.log_classifier --test-rules --summary $(CLASSIFY_ARGS)
+
+lock:
+	@echo "==> Updating uv.lock in container..."
+	$(RUNTIME) run $(RUN_FLAGS) $(IMAGE_TAG) uv lock
+
+check-lock:
+	@echo "==> Verifying uv.lock consistency..."
+	$(RUNTIME) run $(RUN_FLAGS) $(IMAGE_TAG) uv lock --check
 
 shell:
 	@echo "==> Spawning interactive shell in $(IMAGE_TAG)..."
