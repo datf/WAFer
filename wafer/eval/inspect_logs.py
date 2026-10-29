@@ -3,13 +3,15 @@
 import argparse
 import json
 import os
+import random
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 
-from wafer.data.log_parser import parse_and_sanitize_log_line
+from wafer.data.log_parser import parse_and_sanitize_log_line, parse_and_classify_file
 from wafer.data.synthetic import STANDARD_QUESTIONS, generate_synthetic_waf_samples
 from wafer.model.backbone import MockTokenizer, SurrogateDecisionModel
 from wafer.model.encoder import encode_record
@@ -99,11 +101,74 @@ def evaluate_sanitized_request(
     }
 
 
+def load_waf_training_records(
+    log_source: Optional[Union[str, List[str], Path]] = None,
+    include_synthetic: bool = True,
+    max_records: Optional[int] = 1000,
+    seed: int = 42,
+) -> List[Dict[str, Any]]:
+    """
+    Assembles a balanced WAF training dataset combining real parsed access logs
+    (with classified ground truth labels, including 301/302/308 tarpit redirects)
+    and synthetic exploit vectors.
+    """
+    real_records: List[Dict[str, Any]] = []
+
+    sources: List[Path] = []
+    if log_source:
+        if isinstance(log_source, (str, Path)):
+            sources.append(Path(log_source))
+        else:
+            sources.extend(Path(s) for s in log_source)
+    else:
+        for candidate in ["data/dnlogs.log", "data/sample_traffic.log"]:
+            p = Path(candidate)
+            if p.exists():
+                sources.append(p)
+        caddy_dir = Path("backuplogs/caddy")
+        if caddy_dir.exists():
+            sources.append(caddy_dir)
+
+    for src in sources:
+        if src.is_file():
+            for _, _, rec in parse_and_classify_file(src):
+                if rec.get("targets"):
+                    real_records.append(rec)
+        elif src.is_dir():
+            for root, _, files in os.walk(src):
+                for f in sorted(files):
+                    fp = Path(root) / f
+                    if fp.suffix in (".log", ".gz", ".txt") or "access" in f:
+                        for _, _, rec in parse_and_classify_file(fp, limit=300):
+                            if rec.get("targets"):
+                                real_records.append(rec)
+
+    synthetic_records = generate_synthetic_waf_samples() if include_synthetic else []
+    combined = real_records + synthetic_records
+
+    rng = random.Random(seed)
+    allows = [r for r in combined if r.get("targets", {}).get("action") == "allow"]
+    denies = [r for r in combined if r.get("targets", {}).get("action") == "deny"]
+    rng.shuffle(allows)
+    rng.shuffle(denies)
+
+    if max_records is not None and max_records > 0:
+        half = max_records // 2
+        selected = allows[:half] + denies[:half]
+    else:
+        selected = allows + denies
+
+    rng.shuffle(selected)
+    return selected
+
+
 def get_trained_surrogate(
     checkpoint_path: str = "checkpoints/calibrated_surrogate.pt",
-    epochs: int = 25,
+    epochs: Optional[int] = None,
     seed: int = 42,
     force_retrain: bool = False,
+    train_records: Optional[int] = None,
+    train_logs: Optional[str] = None,
 ) -> Tuple[torch.nn.Module, Any]:
     """
     Returns a calibrated surrogate model.
@@ -126,14 +191,22 @@ def get_trained_surrogate(
         except Exception:
             pass  # Fallback to retrain if file corrupt or incompatible
 
-    # Train deterministically on synthetic samples
-    records = generate_synthetic_waf_samples()
+    eff_epochs = epochs if epochs is not None else 20
+    eff_records = train_records if train_records is not None else 500
+
+    # Train deterministically on combined real logs and synthetic samples
+    records = load_waf_training_records(
+        log_source=train_logs,
+        include_synthetic=True,
+        max_records=eff_records,
+        seed=seed,
+    )
     encoded = [encode_record(tokenizer, r, targets=r.get("targets")) for r in records]
 
     train_gemma_clef(
         model=model,
         train_data=encoded,
-        epochs=epochs,
+        epochs=eff_epochs,
         head_lr=1e-3,
         lora_lr=1e-3,
         gradient_accumulation_steps=4,
@@ -148,11 +221,13 @@ def get_trained_surrogate(
 def get_trained_pretrained_backbone(
     model_id: str = "google/embeddinggemma-2",
     checkpoint_path: Optional[str] = None,
-    epochs: int = 5,
+    epochs: Optional[int] = None,
     seed: int = 42,
     force_retrain: bool = False,
     device_pref: str = "auto",
     load_in_4bit: bool = False,
+    train_records: Optional[int] = None,
+    train_logs: Optional[str] = None,
 ) -> Tuple[torch.nn.Module, Any]:
     """
     Initializes a real pretrained backbone (EmbeddingGemma 2, Gemma 4, SmolLM2, etc.),
@@ -163,6 +238,7 @@ def get_trained_pretrained_backbone(
         EmbeddingGemmaDecisionModel,
         GemmaClefDecisionModel,
         resolve_model_id,
+        get_backbone_output_dim,
     )
 
     real_model_id = resolve_model_id(model_id)
@@ -198,7 +274,7 @@ def get_trained_pretrained_backbone(
 
     # Determine head dimensions based on model size
     cfg = AutoConfig.from_pretrained(real_model_id)
-    hidden_size = getattr(cfg, "hidden_size", getattr(getattr(cfg, "text_config", None), "hidden_size", 768))
+    hidden_size = get_backbone_output_dim(cfg, default=768)
     d_head = 256 if hidden_size <= 768 else 512
     lora_r = 32 if hidden_size <= 768 else 64
 
@@ -233,14 +309,22 @@ def get_trained_pretrained_backbone(
         except Exception as e:
             print(f"Notice: Could not load existing checkpoint ({e}), retraining...", flush=True)
 
-    records = generate_synthetic_waf_samples()
+    eff_epochs = epochs if epochs is not None else (2 if device == "cpu" else 3)
+    eff_records = train_records if train_records is not None else (200 if device == "cpu" else 1000)
+
+    records = load_waf_training_records(
+        log_source=train_logs,
+        include_synthetic=True,
+        max_records=eff_records,
+        seed=seed,
+    )
     encoded = [encode_record(tokenizer, r, targets=r.get("targets")) for r in records]
 
-    print(f"Fine-tuning {model_id} JointSchemaHead + LoRA on {len(records)} synthetic WAF records ({epochs} epochs)...", flush=True)
+    print(f"Fine-tuning {model_id} JointSchemaHead + LoRA on {len(records)} records (real traffic logs + synthetic vectors, {eff_epochs} epochs)...", flush=True)
     train_gemma_clef(
         model=model,
         train_data=encoded,
-        epochs=epochs,
+        epochs=eff_epochs,
         head_lr=2e-4,
         lora_lr=5e-5,
         gradient_accumulation_steps=4,
@@ -264,6 +348,8 @@ def inspect_log_stream(
     epochs: int = 5,
     device: str = "auto",
     load_in_4bit: bool = False,
+    train_records: Optional[int] = 1000,
+    train_logs: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Parses, sanitizes, and evaluates an array of raw access log lines."""
     if model is None:
@@ -275,6 +361,8 @@ def inspect_log_stream(
                 force_retrain=force_retrain,
                 device_pref=device,
                 load_in_4bit=load_in_4bit,
+                train_records=train_records,
+                train_logs=train_logs,
             )
         elif train_first:
             ckpt = checkpoint_path or "checkpoints/calibrated_surrogate.pt"
@@ -282,6 +370,8 @@ def inspect_log_stream(
                 checkpoint_path=ckpt,
                 epochs=epochs if epochs != 5 else 20,
                 force_retrain=force_retrain,
+                train_records=train_records,
+                train_logs=train_logs,
             )
         else:
             torch.manual_seed(42)
@@ -328,12 +418,14 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--train", action="store_true", default=True, help="Train surrogate on synthetic data first (default: True)")
     parser.add_argument("--model-id", default="surrogate", help="Model backbone: 'surrogate' or HuggingFace ID (e.g. Qwen/Qwen2.5-0.5B)")
-    parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs (default: 5)")
+    parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs (default: auto-selected by device)")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"], help="Device to execute on (auto, cpu, cuda)")
     parser.add_argument("--checkpoint", default=None, help="Path to model checkpoint")
     parser.add_argument("--force-retrain", action="store_true", help="Force retraining checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for determinism")
     parser.add_argument("--4bit", "--load-in-4bit", dest="load_in_4bit", action="store_true", help="Load backbone in 4-bit NF4 precision via BitsAndBytes")
+    parser.add_argument("--train-records", type=int, default=None, help="Maximum number of balanced records for fine-tuning (default: auto-selected by device)")
+    parser.add_argument("--train-logs", default=None, help="Path to access log file or directory to use for fine-tuning")
     args = parser.parse_args()
 
     if args.logfile:
@@ -351,6 +443,8 @@ def main():
         epochs=args.epochs,
         device=args.device,
         load_in_4bit=args.load_in_4bit,
+        train_records=args.train_records,
+        train_logs=args.train_logs,
     )
 
     if args.json:

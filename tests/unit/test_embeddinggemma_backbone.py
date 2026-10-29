@@ -10,6 +10,7 @@ from wafer.model.backbone import (
     EmbeddingGemmaDecisionModel,
     MockTokenizer,
     resolve_model_id,
+    get_backbone_output_dim,
     MODEL_ALIASES,
 )
 from wafer.model.encoder import encode_record
@@ -47,6 +48,26 @@ def test_embeddinggemma_alias_resolution():
     assert resolve_model_id("embeddinggemma-2") == "google/embeddinggemma-2"
     assert resolve_model_id("google/embeddinggemma-2") == "google/embeddinggemma-2"
     assert "embeddinggemma-2" in MODEL_ALIASES
+
+
+def test_get_backbone_output_dim():
+    """Verify dimensionality resolution handles embedding_dim vs hidden_size correctly."""
+    # 1. EmbeddingGemma-style config: internal hidden_size is 512, but output embedding_dim is 768
+    cfg_embedding = SimpleNamespace(
+        text_config=SimpleNamespace(hidden_size=512, embedding_dim=768)
+    )
+    assert get_backbone_output_dim(cfg_embedding) == 768
+
+    # 2. Top-level embedding_dim
+    cfg_top = SimpleNamespace(embedding_dim=768, hidden_size=512)
+    assert get_backbone_output_dim(cfg_top) == 768
+
+    # 3. Standard LLM config (hidden_size only)
+    cfg_llm = SimpleNamespace(hidden_size=2048)
+    assert get_backbone_output_dim(cfg_llm) == 2048
+
+    # 4. Fallback default
+    assert get_backbone_output_dim(None, default=768) == 768
 
 
 def test_embeddinggemma_latent_routing():

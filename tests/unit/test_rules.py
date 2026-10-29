@@ -38,6 +38,13 @@ def test_default_status_rules():
     assert r500.action == "deny"
     assert r500.alert is True
 
+    # 5. 301, 302, 308 (tarpit redirects) should be alerted and denied
+    for code in (301, 302, 308):
+        r_redirect = rules.classify(status_code=code, method="GET", path="/bot-target")
+        assert r_redirect.action == "deny"
+        assert r_redirect.alert is True
+        assert r_redirect.is_malicious == "true"
+
 
 def test_custom_rule_matching():
     """Test explicit custom rule overrides on path, method, and user agent."""

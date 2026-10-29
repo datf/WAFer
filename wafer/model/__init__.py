@@ -8,6 +8,7 @@ from wafer.model.backbone import (
     SurrogateDecisionModel,
     MODEL_ALIASES,
     resolve_model_id,
+    get_backbone_output_dim,
 )
 from wafer.model.loss import compute_calibrated_systemone_loss
 
@@ -22,5 +23,6 @@ __all__ = [
     "SurrogateDecisionModel",
     "MODEL_ALIASES",
     "resolve_model_id",
+    "get_backbone_output_dim",
     "compute_calibrated_systemone_loss",
 ]

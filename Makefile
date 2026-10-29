@@ -15,8 +15,14 @@ LOG_FILE ?= data/sample_traffic.log
 PYTEST_ARGS ?= -v
 CLASSIFY_ARGS ?=
 
+# Extract HF_TOKEN if available in environment or .env
+ifneq (,$(wildcard .env))
+HF_TOKEN ?= $(shell grep -E '^ *(export +)?HF_TOKEN=' .env 2>/dev/null | sed -E "s/^ *(export +)?HF_TOKEN=[\"']?([^\"']*)[\"']?/\2/")
+endif
+ENV_FLAGS := $(if $(HF_TOKEN),-e HF_TOKEN=$(HF_TOKEN),)
+
 # Common container invocation flags
-RUN_FLAGS := --rm -e PYTHONPATH=/app -v $(WORKSPACE):/app:Z -w /app
+RUN_FLAGS := --rm -e PYTHONPATH=/app $(ENV_FLAGS) -v $(WORKSPACE):/app:Z -w /app
 
 .PHONY: all help build test test-unit test-integration test-fast inspect inspect-embeddinggemma train-embeddinggemma classify lock check-lock clean shell
 

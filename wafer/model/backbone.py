@@ -55,6 +55,25 @@ def resolve_model_id(model_id_or_alias: str) -> str:
     return MODEL_ALIASES.get(model_id_or_alias.lower(), model_id_or_alias)
 
 
+def get_backbone_output_dim(cfg: Any, default: int = 768) -> int:
+    """
+    Extracts the output representation dimensionality from model config.
+    Handles embedding backbones (e.g. EmbeddingGemma 2) where internal hidden_size (512)
+    differs from final output projection embedding_dim (768), as well as standard LLMs.
+    """
+    if cfg is None:
+        return default
+    # 1. Check for embedding_dim in cfg or text_config (e.g. google/embeddinggemma-2)
+    for obj in [cfg, getattr(cfg, "text_config", None)]:
+        if obj is not None and getattr(obj, "embedding_dim", None) is not None:
+            return getattr(obj, "embedding_dim")
+    # 2. Check for hidden_size in cfg or text_config
+    for obj in [cfg, getattr(cfg, "text_config", None)]:
+        if obj is not None and getattr(obj, "hidden_size", None) is not None:
+            return getattr(obj, "hidden_size")
+    return default
+
+
 class EmbeddingGemmaDecisionModel(nn.Module):
     """
     High-throughput WAF Decision Model based on Google's EmbeddingGemma 2:
@@ -135,7 +154,7 @@ class EmbeddingGemmaDecisionModel(nn.Module):
             self.backbone = get_peft_model(self.backbone, lora_cfg)
 
         cfg = getattr(self.backbone, "config", None)
-        hidden_size = getattr(cfg, "hidden_size", getattr(getattr(cfg, "text_config", None), "hidden_size", 768))
+        hidden_size = get_backbone_output_dim(cfg, default=768)
 
         self.joint_head = JointSchemaHead(
             backbone_hidden_size=hidden_size,
@@ -233,7 +252,7 @@ class GemmaClefDecisionModel(nn.Module):
         )
         self.backbone = get_peft_model(self.backbone, lora_cfg)
 
-        hidden_size = getattr(self.backbone.config, "hidden_size", 2048)
+        hidden_size = get_backbone_output_dim(getattr(self.backbone, "config", None), default=2048)
         self.joint_head = JointSchemaHead(
             backbone_hidden_size=hidden_size, d_head=d_head
         ).to(dtype=torch_dtype)
