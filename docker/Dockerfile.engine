@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+# Avoid interactive prompts and python buffering
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app"
+
+WORKDIR /app
+
+# Install minimal OS utilities needed for compilation and git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Initialize virtual environment in /opt/venv so volume mounts to /app don't shadow it
+RUN uv venv /opt/venv
+
+# Copy packaging metadata first for layer caching
+COPY pyproject.toml README.md /app/
+
+# Install dependencies into virtual environment
+RUN uv pip install -e ".[dev]"
+
+# Copy source tree and tests
+COPY wafer/ /app/wafer/
+COPY tests/ /app/tests/
+
+# Default entrypoint runs tests
+CMD ["pytest", "tests/", "-v"]

@@ -1,0 +1,20 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+dist
+build
+*.egg-info
+checkpoints/
+backuplogs
+backuplogs/
+backup logs
+backup logs/
+*.log
+*.log.*
+*.gz
+research_logs
