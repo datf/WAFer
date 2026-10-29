@@ -21,8 +21,18 @@ HF_TOKEN ?= $(shell grep -E '^ *(export +)?HF_TOKEN=' .env 2>/dev/null | sed -E 
 endif
 ENV_FLAGS := $(if $(HF_TOKEN),-e HF_TOKEN=$(HF_TOKEN),)
 
+# GPU auto-detection or override (GPU=0 to disable passthrough, GPU=1 to force)
+HAS_NVIDIA := $(shell command -v nvidia-smi 2>/dev/null)
+ifeq ($(GPU),0)
+GPU_FLAGS :=
+else ifeq ($(GPU),1)
+GPU_FLAGS := --gpus all
+else
+GPU_FLAGS := $(if $(HAS_NVIDIA),--gpus all,)
+endif
+
 # Common container invocation flags
-RUN_FLAGS := --rm -e PYTHONPATH=/app $(ENV_FLAGS) -v $(WORKSPACE):/app:Z -w /app
+RUN_FLAGS := --rm -e PYTHONPATH=/app $(ENV_FLAGS) $(GPU_FLAGS) -v $(WORKSPACE):/app:Z -w /app
 
 .PHONY: all help build test test-unit test-integration test-fast inspect inspect-embeddinggemma train-embeddinggemma classify lock check-lock clean shell
 

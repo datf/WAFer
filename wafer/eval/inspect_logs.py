@@ -263,9 +263,16 @@ def get_trained_pretrained_backbone(
         has_compatible_cuda = False
         if torch.cuda.is_available():
             try:
-                major, _ = torch.cuda.get_device_capability()
-                if major >= 7:  # Volta, Turing, Ampere, Ada, Hopper
+                major, minor = torch.cuda.get_device_capability()
+                dev_name = torch.cuda.get_device_name(0)
+                if major >= 7:  # Volta (7.0), Turing (7.5), Ampere (8.0), Ada (8.9), Hopper (9.0)
                     has_compatible_cuda = True
+                else:
+                    print(
+                        f"Notice: Detected GPU '{dev_name}' (Compute Capability {major}.{minor}), which is older than "
+                        f"the PyTorch wheel's sm_70+ build. Falling back to CPU to prevent CUBLAS_STATUS_ARCH_MISMATCH.",
+                        flush=True,
+                    )
             except Exception:
                 has_compatible_cuda = False
         device = "cuda" if has_compatible_cuda else "cpu"
