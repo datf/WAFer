@@ -10,6 +10,8 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    assignees:
+      - "datf"
 
   # Monitor Python dependencies in pyproject.toml
   - package-ecosystem: "pip"
@@ -20,6 +22,8 @@ updates:
     labels:
       - "dependencies"
       - "python"
+    assignees:
+      - "datf"
 
   # Monitor Dockerfile base images in docker/
   - package-ecosystem: "docker"
@@ -30,3 +34,5 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    assignees:
+      - "datf"
