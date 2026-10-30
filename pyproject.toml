@@ -28,7 +28,7 @@ dev = [
     "httpx>=0.28.1",
 ]
 gpu = [
-    "bitsandbytes>=0.45.0",
+    "bitsandbytes>=0.50.2",
 ]
 
 [tool.setuptools.packages.find]
